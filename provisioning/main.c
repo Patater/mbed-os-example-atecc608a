@@ -24,7 +24,9 @@
 #include "atecc608a_se.h"
 
 /* The slot number for the device private key stored in the secure element by
- * the secure element factory. */
+ * the secure element factory. Note: If your SE has a pre-provisioned key in
+ * slot 0, this can be 0; a key slot is not the same as a key ID, and key IDs
+ * of 0 are invalid, but key slots of 0 are OK. */
 #define EXAMPLE_DEVICE_KEY_SE_SLOT 1
 
 /* The application-specific key ID for the device private key. */
