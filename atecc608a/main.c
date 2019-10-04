@@ -76,9 +76,21 @@
     "the slot now behaves according to the policies set by the associated\n"\
     "configuration zone’s values. [y/n]: "
 
-/* Data used by tests */
-psa_key_slot_number_t atecc608a_private_key_slot = 1;
-psa_key_slot_number_t atecc608a_public_key_slot = 9;
+/* Physical locations of the keys in the secure element. */
+psa_key_slot_number_t atecc608a_private_key_slot = 0x01;
+psa_key_slot_number_t atecc608a_public_key_slot = 0x09;
+
+/* Key IDs used by applications. These are often different from the physical
+ * location of the key in the secure element.
+ *
+ * Note: For this example, we use IDs that are outside the range of valid
+ * physical secure element slots (0 through 0x0F inclusive) in order to
+ * emphasize that key IDs are separate from key slot numbers. Misuse of key ID
+ * as a slot number will cause the driver to error. */
+psa_key_id_t atecc608a_private_key_id = 0x11;
+psa_key_id_t atecc608a_public_key_id = 0x19;
+psa_key_id_t generated_priv_key_id = 0x21;
+psa_key_id_t generated_pub_key_id = 0x29;
 
 enum {
     key_type = PSA_KEY_TYPE_ECC_PUBLIC_KEY(PSA_ECC_CURVE_SECP256R1),
