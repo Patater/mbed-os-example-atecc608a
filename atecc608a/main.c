@@ -208,7 +208,7 @@ psa_status_t test_psa_import_verify(psa_key_attributes_t *private_attributes)
     };
     psa_key_attributes_t attributes = PSA_KEY_ATTRIBUTES_INIT;
 
-    ASSERT_SUCCESS_PSA(psa_open_key(atecc608a_private_key_slot,
+    ASSERT_SUCCESS_PSA(psa_open_key(atecc608a_private_key_id,
                                     &private_handle));
 
     ASSERT_SUCCESS_PSA(psa_asymmetric_sign(private_handle, alg, hash, sizeof(hash),
@@ -253,7 +253,7 @@ psa_status_t test_export_import(psa_key_attributes_t *private_attributes,
     psa_key_handle_t public_handle = 0;
     psa_key_handle_t private_handle = 0;
 
-    ASSERT_SUCCESS_PSA(psa_open_key(atecc608a_private_key_slot,
+    ASSERT_SUCCESS_PSA(psa_open_key(atecc608a_private_key_id,
                                     &private_handle));
 
     ASSERT_SUCCESS_PSA(psa_export_public_key(private_handle, pubkey,
@@ -345,10 +345,11 @@ exit:
 }
 
 void setup_key_attributes(psa_key_attributes_t *attributes,
+                          psa_key_id_t key_id,
                           psa_key_slot_number_t slot, int is_private)
 {
     psa_set_key_slot_number(attributes, slot);
-    psa_set_key_id(attributes, slot);
+    psa_set_key_id(attributes, key_id);
     psa_set_key_lifetime(attributes, PSA_ATECC608A_LIFETIME);
     psa_set_key_algorithm(attributes, alg);
     psa_set_key_bits(attributes, key_bits);
@@ -373,9 +374,11 @@ psa_status_t run_tests()
     mbed_psa_reboot_and_request_new_security_state(PSA_LIFECYCLE_ASSEMBLY_AND_TEST);
 
     setup_key_attributes(&public_key_attributes,
+                         atecc608a_public_key_id,
                          atecc608a_public_key_slot, 0);
 
     setup_key_attributes(&private_key_attributes,
+                         atecc608a_private_key_id,
                          atecc608a_private_key_slot, 1);
 
     printf("Running tests...\n");
@@ -465,7 +468,8 @@ bool interactive_loop()
             printf("Invalid slot %u provided for generate_private command.\n", slot);
             return false;
         }
-        setup_key_attributes(&private_attributes, slot, 1);
+        setup_key_attributes(&private_attributes,
+                             generated_priv_key_id, slot, 1);
         printf("Generating a private key in slot %u... ", slot);
         status = psa_generate_key(&private_attributes, &private_handle);
 
@@ -485,7 +489,6 @@ bool interactive_loop()
         psa_key_handle_t public_handle = 0;
         psa_key_handle_t private_handle = 0;
         psa_key_attributes_t public_attributes = PSA_KEY_ATTRIBUTES_INIT;
-        psa_key_attributes_t private_attributes = PSA_KEY_ATTRIBUTES_INIT;
 
         // Check if an argument is missing
         if (len <= strlen("generate_public=0_9") - 1) {
@@ -500,12 +503,12 @@ bool interactive_loop()
                    slot_private, slot_public);
             return false;
         }
-        setup_key_attributes(&public_attributes, slot_public, 0);
-        setup_key_attributes(&private_attributes, slot_private, 1);
+        setup_key_attributes(&public_attributes,
+                             generated_pub_key_id, slot_public, 0);
         printf("Exporting a public key from private key in slot %u... ",
                slot_private);
 
-        status = psa_open_key(slot_private, &private_handle);
+        status = psa_open_key(generated_priv_key_id, &private_handle);
         if (status != PSA_SUCCESS) {
             printf("Failed! Error %ld.\n", status);
             return false;
