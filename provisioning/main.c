@@ -223,17 +223,12 @@ void generate_csr(psa_key_id_t key_id)
     mbedtls_pk_context pk;
     mbedtls_x509write_csr req;
 
-    putchar('a');
-    fflush(stdout);
-
     output = calloc(1, OUTPUT_LEN);
     if (!output)
     {
         puts("Out of memory");
         return;
     }
-    putchar('b');
-    fflush(stdout);
 
     /* Open the specified key. */
     status = psa_open_key(key_id, &handle);
@@ -242,8 +237,6 @@ void generate_csr(psa_key_id_t key_id)
         printf("Failed to open key %lu with status=%ld\n", key_id, status);
         goto done;
     }
-    putchar('c');
-    fflush(stdout);
 
     mbedtls_pk_init(&pk);
     ret = mbedtls_pk_setup_opaque(&pk, handle);
@@ -252,58 +245,36 @@ void generate_csr(psa_key_id_t key_id)
         printf("Failed to setup PK with ret=%d\n", ret);
         goto done;
     }
-    putchar('d');
-    fflush(stdout);
 
     mbedtls_x509write_csr_init(&req);
-    putchar('e');
-    fflush(stdout);
     mbedtls_x509write_csr_set_md_alg(&req, MBEDTLS_MD_SHA256);
-    putchar('f');
-    fflush(stdout);
 
     ret = mbedtls_x509write_csr_set_subject_name(
         &req, "CN=Device,O=Mbed TLS,OU=client,C=UK");
-    putchar('g');
-    fflush(stdout);
     if (ret != 0)
     {
         printf("Failed to set subject name with ret=%d\n", ret);
         goto done;
     }
 
-    putchar('h');
-    fflush(stdout);
     mbedtls_x509write_csr_set_key_usage(
         &req, MBEDTLS_X509_KU_DIGITAL_SIGNATURE);
 
-    putchar('i');
-    fflush(stdout);
     mbedtls_x509write_csr_set_ns_cert_type(
         &req, MBEDTLS_X509_NS_CERT_TYPE_SSL_CLIENT);
 
-    putchar('j');
-    fflush(stdout);
     mbedtls_x509write_csr_set_key(&req, &pk);
 
-    putchar('k');
-    fflush(stdout);
     ret = mbedtls_x509write_csr_pem(&req, output, OUTPUT_LEN,
         psa_rng_for_mbedtls, NULL);
-    putchar('l');
-    fflush(stdout);
     if (ret != 0)
     {
         printf("Failed to make CSR with ret=%d\n", ret);
         goto done;
     }
 
-    putchar('m');
-    fflush(stdout);
     printf("%s", output);
 
-    putchar('n');
-    fflush(stdout);
 done:
     free(output);
     mbedtls_x509write_csr_free(&req);
@@ -395,6 +366,7 @@ int main(void)
     print_public_key(EXAMPLE_GENERATED_KEY_ID);
 
     printf("Device-generated CSRs:\n");
+    generate_csr(EXAMPLE_FACTORY_KEY_ID);
     generate_csr(EXAMPLE_GENERATED_KEY_ID);
 
     return PSA_SUCCESS;
