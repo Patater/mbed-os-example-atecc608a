@@ -28,3 +28,7 @@
 
 /* Enable pretty-printing of public keys. */
 #define MBEDTLS_PEM_WRITE_C
+
+/* Enable additional features needed to generate a CSR */
+#define MBEDTLS_X509_CREATE_C
+#define MBEDTLS_X509_CSR_WRITE_C
