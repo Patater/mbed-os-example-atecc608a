@@ -29,7 +29,14 @@
 
 /* Make Mbed TLS use PSA. */
 #if !defined(MBEDTLS_USE_PSA_CRYPTO)
-#    define MBEDTLD_USE_PSA_CRYPTO
+#    define MBEDTLS_USE_PSA_CRYPTO
 #endif
 
+/* Enable features needed to generate a CSR */
+//#define MBEDTLS_CTR_DRBG_C
+//#define MBEDTLS_ENTROPY_C
 #define MBEDTLS_PEM_WRITE_C
+//#define MBEDTLS_PK_PARSE_C
+//#define MBEDTLS_SHA256_C
+#define MBEDTLS_X509_CREATE_C
+#define MBEDTLS_X509_CSR_WRITE_C
