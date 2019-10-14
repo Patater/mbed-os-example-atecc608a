@@ -262,7 +262,7 @@ int main(void)
     printf("\tMaking HTTPS request...");
     fflush(stdout);
     static const char *path = "/media/uploads/mbed_official/hello.txt";
-    static char gp_buf[512];
+    static char gp_buf[1024];
     ret = snprintf(gp_buf, sizeof(gp_buf),
                    "GET %s HTTP/1.1\nHost: %s\n\n", path,
                    server);
