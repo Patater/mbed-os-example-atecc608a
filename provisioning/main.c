@@ -157,16 +157,34 @@ psa_status_t register_preprovisioned_keys(void)
                      PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_CURVE_SECP256R1));
 
     /* Register the factory-created key with Mbed Crypto, so that Mbed Crypto
-     * knows that the key exists and how to find and access the key. */
+     * knows that the key exists and how to find and access the key. This
+     * registration only needs doing once, as Mbed Crypto will remember the
+     * registration even across reboots. */
     return mbedtls_psa_register_se_key(&attributes);
 }
 
 void print_public_key_data(psa_key_handle_t handle)
 {
-    int ret;
-    unsigned char *output;
+}
+
+void print_public_key(psa_key_id_t key_id)
+{
     enum { OUTPUT_LEN = 256 };
+    int ret;
+    psa_status_t status;
+    unsigned char *output;
+    psa_key_handle_t handle;
     mbedtls_pk_context pk;
+
+    printf("\tKey ID %lu:\n", key_id);
+
+    /* Open the specified key. */
+    status = psa_open_key(key_id, &handle);
+    if (status != PSA_SUCCESS)
+    {
+        printf("Failed to open key %lu with status=%ld\n", key_id, status);
+        return;
+    }
 
     output = calloc(1, OUTPUT_LEN);
     if (!output) {
@@ -188,29 +206,11 @@ void print_public_key_data(psa_key_handle_t handle)
         goto done;
     }
 
-    printf("%s", output);
+    printf("%s\n", output);
 
 done:
     mbedtls_pk_free(&pk);
     free(output);
-}
-
-void print_public_key(psa_key_id_t key_id)
-{
-    psa_status_t status;
-    psa_key_handle_t handle;
-
-    putchar('\t');
-
-    /* Open the specified key. */
-    status = psa_open_key(key_id, &handle);
-    if (status != PSA_SUCCESS)
-    {
-        printf("Failed to open key %lu with status=%ld\n", key_id, status);
-        return;
-    }
-
-    print_public_key_data(handle);
 }
 
 void generate_csr(psa_key_id_t key_id)
@@ -223,6 +223,11 @@ void generate_csr(psa_key_id_t key_id)
     mbedtls_pk_context pk;
     mbedtls_x509write_csr req;
 
+    /* Initialize Mbed TLS structures. */
+    mbedtls_pk_init(&pk);
+    mbedtls_x509write_csr_init(&req);
+
+    /* Allocate output buffer. */
     output = calloc(1, OUTPUT_LEN);
     if (!output)
     {
@@ -238,7 +243,6 @@ void generate_csr(psa_key_id_t key_id)
         goto done;
     }
 
-    mbedtls_pk_init(&pk);
     ret = mbedtls_pk_setup_opaque(&pk, handle);
     if (ret != 0)
     {
@@ -246,7 +250,6 @@ void generate_csr(psa_key_id_t key_id)
         goto done;
     }
 
-    mbedtls_x509write_csr_init(&req);
     mbedtls_x509write_csr_set_md_alg(&req, MBEDTLS_MD_SHA256);
 
     ret = mbedtls_x509write_csr_set_subject_name(
@@ -273,7 +276,8 @@ void generate_csr(psa_key_id_t key_id)
         goto done;
     }
 
-    printf("%s", output);
+    printf("\tKey ID %lu:\n", key_id);
+    printf("%s\n", output);
 
 done:
     free(output);
@@ -294,6 +298,8 @@ int main(void)
     psa_status_t status;
     printf("Provisioning device...\n");
 
+#define ERASE_DEVICE 1
+#if ERASE_DEVICE
     printf("\tErasing device... ");
     fflush(stdout);
     status = mbed_psa_reboot_and_request_new_security_state(PSA_LIFECYCLE_ASSEMBLY_AND_TEST);
@@ -303,6 +309,9 @@ int main(void)
         return status;
     }
     printf("done.\n");
+#else
+    printf("\tNot erasing device... done\n");
+#endif
 
     printf("\tRegistering drivers... ");
     fflush(stdout);
@@ -324,6 +333,8 @@ int main(void)
     }
     printf("done.\n");
 
+#define PROVISION_DEVICE_PLEASE 1
+#if PROVISION_DEVICE_PLEASE
     printf("\tRegistering factory-created keys... ");
     fflush(stdout);
     status = register_preprovisioned_keys();
@@ -355,9 +366,11 @@ int main(void)
         return status;
     }
     printf("done.\n");
+#endif
 
     printf("Device provisioned\n");
 
+    printf("\n---------------------------------------------------------------------\n\n");
     printf("Device public keys:\n");
     print_public_key(EXAMPLE_FACTORY_KEY_ID);
 #if 0
