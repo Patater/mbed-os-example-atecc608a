@@ -26,34 +26,39 @@ func newCertPoolFromPEMFile(filename string) (*x509.CertPool, error) {
 	return certPool, nil
 }
 
-func root(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain")
-	w.Write([]byte("Hello world!"))
-}
-
 func main() {
+	cert, err := tls.LoadX509KeyPair("goClient.crt", "goClient.key")
+	if err != nil {
+		log.Fatal("LoadX509KeyPair: ", err)
+		return
+	}
+
 	rootCA, err := newCertPoolFromPEMFile("serverca.pem")
 	if err != nil {
 		return
 	}
 
-	clientCA, err := newCertPoolFromPEMFile("deviceca.pem")
+	config := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      rootCA,
+		ServerName:   "goServer",
+	}
+	tr := &http.Transport{
+		TLSClientConfig: config,
+	}
+	client := &http.Client{Transport: tr}
+	resp, err := client.Get("https://localhost:8443/")
 	if err != nil {
+		log.Fatal("client.Get: ", err)
 		return
 	}
 
-	http.HandleFunc("/", root)
-	config := &tls.Config{
-		RootCAs:    rootCA,
-		ClientCAs:  clientCA,
-		ClientAuth: tls.RequireAndVerifyClientCert,
-	}
-	server := &http.Server{
-		Addr:      ":8443",
-		TLSConfig: config,
-	}
-	err = server.ListenAndServeTLS("goServer.crt", "goServer.key")
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal("ListenAndServeTLS: ", err)
+		log.Fatal("ReadAll: ", err)
 	}
+
+	log.Print(string(body))
 }

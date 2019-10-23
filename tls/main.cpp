@@ -21,6 +21,7 @@
 #if defined(ATCA_HAL_I2C)
 #include "TCPSocket.h"
 #include "mbedtls/config.h"
+#include "mbedtls/pk.h"
 #include "mbedtls/platform.h"
 #include "mbedtls/ssl.h"
 #include "mbedtls/entropy.h"
@@ -30,55 +31,76 @@
 #include "psa/lifecycle.h"
 #include "atecc608a_se.h"
 
-/* The application-specific key ID for the device private key. */
-#define EXAMPLE_DEVICE_KEY_ID 3
+/* Keys available to the device. Note that no slot IDs are present in the
+ * application, only in the provisioning example. Here we have only key IDs. */
+
+/* The application-specific key ID for the secure element factory-provided
+ * device private key. This provisioning example application will associate the
+ * factory-provided key with this key ID for use by other applications. Any
+ * valid ID can be chosen here; the chosen ID does not need to correlate in any
+ * way with the physical location of the key (within the secure element). */
+#define EXAMPLE_FACTORY_KEY_ID 0x10
+
+/* The application-specific key ID for the device private key imported into the
+ * secure element by this example provisioning application. */
+#define EXAMPLE_IMPORTED_KEY_ID 0x11
+
+/* The application-specific key ID for the device private key imported into the
+ * secure element by this example provisioning application. */
+#define EXAMPLE_GENERATED_KEY_ID 0x12
 
 #define TEST_MACHINE_IP "10.2.202.186"
 
 /* Chain of trusted CAs in PEM format */
 static const unsigned char tls_pem_ca[] =
     "-----BEGIN CERTIFICATE-----\n"
-    "MIIDQTCCAimgAwIBAgITBmyfz5m/jAo54vB4ikPmljZbyjANBgkqhkiG9w0BAQsF\n"
-    "ADA5MQswCQYDVQQGEwJVUzEPMA0GA1UEChMGQW1hem9uMRkwFwYDVQQDExBBbWF6\n"
-    "b24gUm9vdCBDQSAxMB4XDTE1MDUyNjAwMDAwMFoXDTM4MDExNzAwMDAwMFowOTEL\n"
-    "MAkGA1UEBhMCVVMxDzANBgNVBAoTBkFtYXpvbjEZMBcGA1UEAxMQQW1hem9uIFJv\n"
-    "b3QgQ0EgMTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBALJ4gHHKeNXj\n"
-    "ca9HgFB0fW7Y14h29Jlo91ghYPl0hAEvrAIthtOgQ3pOsqTQNroBvo3bSMgHFzZM\n"
-    "9O6II8c+6zf1tRn4SWiw3te5djgdYZ6k/oI2peVKVuRF4fn9tBb6dNqcmzU5L/qw\n"
-    "IFAGbHrQgLKm+a/sRxmPUDgH3KKHOVj4utWp+UhnMJbulHheb4mjUcAwhmahRWa6\n"
-    "VOujw5H5SNz/0egwLX0tdHA114gk957EWW67c4cX8jJGKLhD+rcdqsq08p8kDi1L\n"
-    "93FcXmn/6pUCyziKrlA4b9v7LWIbxcceVOF34GfID5yHI9Y/QCB/IIDEgEw+OyQm\n"
-    "jgSubJrIqg0CAwEAAaNCMEAwDwYDVR0TAQH/BAUwAwEB/zAOBgNVHQ8BAf8EBAMC\n"
-    "AYYwHQYDVR0OBBYEFIQYzIU07LwMlJQuCFmcx7IQTgoIMA0GCSqGSIb3DQEBCwUA\n"
-    "A4IBAQCY8jdaQZChGsV2USggNiMOruYou6r4lK5IpDB/G/wkjUu0yKGX9rbxenDI\n"
-    "U5PMCCjjmCXPI6T53iHTfIUJrU6adTrCC2qJeHZERxhlbI1Bjjt/msv0tadQ1wUs\n"
-    "N+gDS63pYaACbvXy8MWy7Vu33PqUXHeeE6V/Uq2V8viTO96LXFvKWlJbYK8U90vv\n"
-    "o/ufQJVtMVT8QtPHRh8jrdkPSHCa2XV4cdFyQzR1bldZwgJcJmApzyMZFo6IQ6XU\n"
-    "5MsI+yMRQ+hDKXJioaldXgjUkK642M4UwtBV8ob2xJNDd2ZhwLnoQdeXeGADbkpy\n"
-    "rqXRfboQnoZsG4q5WTP468SQvvG5\n"
+    "MIIB6DCCAY6gAwIBAgIQLMogmbswN5Ne3fRRCUbBmjAKBggqhkjOPQQDAjBCMQ8w\n"
+    "DQYDVQQDDAZSb290Q0ExCzAJBgNVBAYTAlVLMREwDwYDVQQKDAhNYmVkIFRMUzEP\n"
+    "MA0GA1UECwwGUm9vdENBMB4XDTE5MTAxNzE0MDg1MVoXDTI5MTAxNDE0MDg1MVow\n"
+    "QjEPMA0GA1UEAwwGUm9vdENBMQswCQYDVQQGEwJVSzERMA8GA1UECgwITWJlZCBU\n"
+    "TFMxDzANBgNVBAsMBlJvb3RDQTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABBM7\n"
+    "evUyi7hFhhutj6yVKk1LsX+l0m5c6/9CjkAw/hFoHypQauFnPlJpdxt9T9l1TLXP\n"
+    "i/LSUl2SWHOY7g5HXXWjZjBkMB0GA1UdDgQWBBRPVxyJGfCLO+1gyHzXhzuzKuOv\n"
+    "nzAfBgNVHSMEGDAWgBRPVxyJGfCLO+1gyHzXhzuzKuOvnzAOBgNVHQ8BAf8EBAMC\n"
+    "AQYwEgYDVR0TAQH/BAgwBgEB/wIBATAKBggqhkjOPQQDAgNIADBFAiBuBpeBx2gE\n"
+    "qm6pYdoD/E5HE1WCj41GxYdhBbDNCUTfZwIhALx1MZ9uJeT6rqw9Yfa8xiuIx+RJ\n"
+    "3JewUxTNcK3fr5Q4\n"
+    "-----END CERTIFICATE-----\n"
+    "-----BEGIN CERTIFICATE-----\n"
+    "MIIB0zCCAXqgAwIBAgIQLMpwgt5FoU8OdY/jh8yFmTAKBggqhkjOPQQDAjBCMQ8w\n"
+    "DQYDVQQDDAZSb290Q0ExCzAJBgNVBAYTAlVLMREwDwYDVQQKDAhNYmVkIFRMUzEP\n"
+    "MA0GA1UECwwGUm9vdENBMB4XDTE5MTAxNzE0MDkzMFoXDTI5MTAxMzE0MDkzMFow\n"
+    "LjESMBAGA1UEAwwJU2VydmVyU3ViMQswCQYDVQQGEwJVSzELMAkGA1UECwwCQ0Ew\n"
+    "WTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAARUYzQihGmN8JnUmiLNBDXUeQpGSMxx\n"
+    "pYKdht/YNhUNba9sWWMponM2oKJWVwVPftJaGYAFWZoJa246UgvnMHEno2YwZDAd\n"
+    "BgNVHQ4EFgQUaHzMXLCNJ161X0D8QAEd8kahR4EwHwYDVR0jBBgwFoAUT1cciRnw\n"
+    "izvtYMh814c7syrjr58wDgYDVR0PAQH/BAQDAgEGMBIGA1UdEwEB/wQIMAYBAf8C\n"
+    "AQEwCgYIKoZIzj0EAwIDRwAwRAIgM0MZRNB2iL92E4AkYqVIXNbuNbe8mHt37wpo\n"
+    "RaKggB0CIDUlzUXga9ChmMI5oOBRWBp+BUPIRxGoJTmg4X8y098s\n"
     "-----END CERTIFICATE-----\n";
 
 /* Client certificate for TLS client authentication in PEM format */
 static const unsigned char tls_client_crt[] =
     "-----BEGIN CERTIFICATE-----\n"
-    "MIIBaTCCAQ4CEQC+7wfRMe7m3Ny6Dbcgsz7MMAoGCCqGSM49BAMCMC4xEjAQBgNV\n"
-    "BAMMCURldmljZVN1YjELMAkGA1UEBhMCVUsxCzAJBgNVBAsMAkNBMB4XDTE5MTAx\n"
-    "MTE2NDk1NloXDTIxMTAxMDE2NDk1NlowQjEPMA0GA1UEAwwGRGV2aWNlMREwDwYD\n"
-    "VQQKDAhNYmVkIFRMUzEPMA0GA1UECwwGY2xpZW50MQswCQYDVQQGEwJVSzBZMBMG\n"
-    "ByqGSM49AgEGCCqGSM49AwEHA0IABITdntuC6BsjdYwYam/u5qI3V8PyspDCZ5v2\n"
-    "3eI/gcVLAYBzha/75JMcsdsLwMOq89Lo56Ae1k6qAZOhwO4g34wwCgYIKoZIzj0E\n"
-    "AwIDSQAwRgIhAMLb7nQ377J5P3ox5DuNJNib3F9mrbTPTVjaxSK54/XtAiEA4FWX\n"
-    "rcwFgYBGlR3n+gpOmlIRWwMhKUjKJH77eW6CMiM=\n"
+    "MIIBaDCCAQ0CECzKB9Ex7ubc3LoNtyCzPswwCgYIKoZIzj0EAwIwLjESMBAGA1UE\n"
+    "AwwJRGV2aWNlU3ViMQswCQYDVQQGEwJVSzELMAkGA1UECwwCQ0EwHhcNMTkxMDE4\n"
+    "MTM0NjI0WhcNMjExMDE3MTM0NjI0WjBCMQ8wDQYDVQQDDAZEZXZpY2UxETAPBgNV\n"
+    "BAoMCE1iZWQgVExTMQ8wDQYDVQQLDAZjbGllbnQxCzAJBgNVBAYTAlVLMFkwEwYH\n"
+    "KoZIzj0CAQYIKoZIzj0DAQcDQgAEpSpvasaU/xkq1MrYeNtaQjIHPPPpGQdde7fF\n"
+    "0MqkJyhLcRLspXh+aog4bMXs3PSuDjUMUMYGyoT4MjeeeEZJJjAKBggqhkjOPQQD\n"
+    "AgNJADBGAiEAk971WKwlJnDgHfYLQzCYYsY9LYOTwV7pxoIy8xw/LboCIQDxzNZr\n"
+    "HGHh4/n//t3hY3/jEK7LAEyD4VAflgC+x2h+Lw==\n"
     "-----END CERTIFICATE-----\n";
 
 /* Server to connect to */
-static const char *server = "os.mbed.com";
+static const char *server = "10.2.202.186";
 
 /* Mbed TLS contexts */
 mbedtls_platform_context platform_ctx;
 mbedtls_entropy_context entropy;
 mbedtls_ctr_drbg_context ctr_drbg;
 mbedtls_x509_crt cacert;
+mbedtls_x509_crt own_cert;
 mbedtls_ssl_context ssl;
 mbedtls_ssl_config ssl_conf;
 
@@ -115,6 +137,7 @@ int my_ssl_recv(void *ctx, unsigned char *buf, size_t len)
 int init(void)
 {
     int ret;
+    psa_status_t status;
 
     ret = mbedtls_platform_setup(&platform_ctx);
     if (ret != 0) {
@@ -135,6 +158,7 @@ int init(void)
     mbedtls_ctr_drbg_init(&ctr_drbg);
 
     mbedtls_x509_crt_init(&cacert);
+    mbedtls_x509_crt_init(&own_cert);
     mbedtls_ssl_init(&ssl);
     mbedtls_ssl_config_init(&ssl_conf);
 
@@ -155,6 +179,13 @@ int init(void)
         return ret;
     }
 
+    ret = mbedtls_x509_crt_parse(&own_cert,
+                                 tls_client_crt, sizeof(tls_client_crt));
+    if (ret != 0) {
+        printf("mbedtls_x509_crt_parse() returned -0x%04X\n", -ret);
+        return ret;
+    }
+
     ret = mbedtls_ssl_config_defaults(&ssl_conf, MBEDTLS_SSL_IS_CLIENT,
                                       MBEDTLS_SSL_TRANSPORT_STREAM,
                                       MBEDTLS_SSL_PRESET_DEFAULT);
@@ -168,6 +199,57 @@ int init(void)
     mbedtls_ssl_conf_rng(&ssl_conf, mbedtls_ctr_drbg_random, &ctr_drbg);
 
     mbedtls_ssl_conf_authmode(&ssl_conf, MBEDTLS_SSL_VERIFY_REQUIRED);
+
+    /* Use the SE factory key for the mutually authenticated TLS connection. */
+
+    psa_key_handle_t handle;
+    static const psa_key_id_t key_id = EXAMPLE_FACTORY_KEY_ID;
+
+    /* XXX SHould be persistent! */
+    #if 0
+    psa_key_attributes_t attributes = PSA_KEY_ATTRIBUTES_INIT;
+
+    /* Set device private key attributes. */
+    psa_set_key_slot_number(&attributes, 0);
+    psa_set_key_id(&attributes, EXAMPLE_FACTORY_KEY_ID);
+    psa_set_key_lifetime(&attributes, PSA_ATECC608A_LIFETIME);
+    psa_set_key_algorithm(&attributes, PSA_ALG_ECDSA(PSA_ALG_SHA_256));
+    psa_set_key_bits(&attributes, 256);
+    psa_set_key_usage_flags(&attributes, PSA_KEY_USAGE_SIGN);
+    psa_set_key_type(&attributes,
+                     PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_CURVE_SECP256R1));
+
+    /* Register the factory-created key with Mbed Crypto, so that Mbed Crypto
+     * knows that the key exists and how to find and access the key. This
+     * registration only needs doing once, as Mbed Crypto will remember the
+     * registration even across reboots. */
+    status = mbedtls_psa_register_se_key(&attributes);
+    if (status != PSA_SUCCESS)
+    {
+        printf("Failed to register slot %lu with status=%ld\n", 0, status);
+        return status;
+    }
+    #endif
+    /* XXX SHould be persistent! */
+
+    /* Open the specified key. */
+    status = psa_open_key(key_id, &handle);
+    if (status != PSA_SUCCESS)
+    {
+        printf("Failed to open key ID %lu with status=%ld\n", key_id, status);
+        return status;
+    }
+
+    static mbedtls_pk_context pk;
+    mbedtls_pk_init(&pk);
+    ret = mbedtls_pk_setup_opaque(&pk, handle);
+    if (ret != 0)
+    {
+        printf("Failed to setup PK with ret=%d\n", ret);
+        return ret;
+    }
+
+    mbedtls_ssl_conf_own_cert(&ssl_conf, &own_cert, &pk);
 
     ret = mbedtls_ssl_setup(&ssl, &ssl_conf);
     if (ret != 0) {
@@ -189,12 +271,18 @@ int main(void)
     psa_status_t status;
     nsapi_size_or_error_t ret;
 
-    if (init() != 0)
-    {
-        return -1;
-    }
-
     printf("Connecting to TLS server...\n");
+
+    printf("\tRegistering drivers... ");
+    fflush(stdout);
+    status = psa_register_se_driver(PSA_ATECC608A_LIFETIME, &atecc608a_drv_info);
+    printf("lifetime: %lu\n", PSA_ATECC608A_LIFETIME);
+    if (status != PSA_SUCCESS)
+    {
+        printf("failed with status=%ld\n", status);
+        return status;
+    }
+    printf("done.\n");
 
     printf("\tInitializing PSA Crypto... ");
     fflush(stdout);
@@ -205,6 +293,11 @@ int main(void)
         return status;
     }
     printf("done.\n");
+
+    if (init() != 0)
+    {
+        return -1;
+    }
 
     printf("\tGetting network... ");
     fflush(stdout);
@@ -237,7 +330,7 @@ int main(void)
 
     printf("\tConnecting... ");
     fflush(stdout);
-    ret = socket->connect(server, 443);
+    ret = socket->connect(server, 8443);
     if (ret != 0) {
         printf("failed with ret=%d\n", ret);
         return ret;
@@ -261,7 +354,7 @@ int main(void)
     /* Fill the request buffer */
     printf("\tMaking HTTPS request...");
     fflush(stdout);
-    static const char *path = "/media/uploads/mbed_official/hello.txt";
+    static const char *path = "/";
     static char gp_buf[1024];
     ret = snprintf(gp_buf, sizeof(gp_buf),
                    "GET %s HTTP/1.1\nHost: %s\n\n", path,

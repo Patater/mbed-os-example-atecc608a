@@ -26,3 +26,8 @@
 #if !defined(MBEDTLS_PSA_CRYPTO_SE_C)
 #    define MBEDTLS_PSA_CRYPTO_SE_C
 #endif
+
+/* Make Mbed TLS use PSA. */
+#if !defined(MBEDTLS_USE_PSA_CRYPTO)
+#    define MBEDTLS_USE_PSA_CRYPTO
+#endif
