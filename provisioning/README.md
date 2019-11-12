@@ -97,3 +97,13 @@ client authentication example also included in this repository (in the
 1. Copy the `Device.crt` file to the `mutual-tls` example folder for use with
    making a mutually-authenticated TLS connection, and follow the directions in
    that example's README.
+
+
+### Troubleshooting
+
+If your provisioning data isn't persisting, there is a chance it is being
+overwritten by the flash programmer. If using DAPLink, ensure you are using a
+DAPLink interface version of 0246 or newer. Older versions of DAPLink do not
+support partial flash programming, and always overwrite any data stored in
+internal flash. In our case, this would be the provisioning data we want to
+keep!
